@@ -35,11 +35,34 @@ function Write-Head($t) {
 }
 
 function Get-LanIPv4 {
+    # 优先按网卡枚举，可以排除 WSL / Hyper-V / VPN / 代理（Clash 等）的虚拟网卡，
+    # 否则会把 172.x、198.18.x 这类地址也当成"内网访问地址"打印出来，误导使用者。
+    $found = New-Object System.Collections.Generic.List[string]
+    try {
+        foreach ($nic in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+            if ($nic.OperationalStatus -ne 'Up') { continue }
+            if ($nic.NetworkInterfaceType -in 'Loopback', 'Tunnel') { continue }
+            $props = $nic.GetIPProperties()
+            foreach ($ua in $props.UnicastAddresses) {
+                $addr = $ua.Address
+                if ($addr.AddressFamily -ne 'InterNetwork') { continue }
+                $ip = $addr.IPAddressToString
+                if ($ip -like '127.*' -or $ip -like '169.254.*') { continue }
+                # 198.18.0.0/15 是基准测试保留段，实践中几乎只有 Clash 之类的 fake-ip 代理在用
+                if ($ip -like '198.18.*' -or $ip -like '198.19.*') { continue }
+                $found.Add($ip)
+            }
+        }
+    } catch { }
+    if ($found.Count) { return @($found | Select-Object -Unique) }
+
+    # 兜底：按主机名解析（虚拟网卡多的时候可能不准，但总比没有强）
     try {
         $ips = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
                Where-Object { $_.AddressFamily -eq 'InterNetwork' }
-        $list = @($ips | ForEach-Object { $_.IPAddressToString } | Where-Object { $_ -notlike '127.*' })
-        if ($list.Count) { return $list }
+        $list = @($ips | ForEach-Object { $_.IPAddressToString } |
+                  Where-Object { $_ -notlike '127.*' -and $_ -notlike '169.254.*' -and $_ -notlike '198.1[89].*' })
+        if ($list.Count) { return @($list | Select-Object -Unique) }
     } catch { }
     return @('127.0.0.1')
 }

@@ -1,0 +1,32 @@
+# 默认：文本文件在仓库里统一存 LF，检出时按平台转换
+* text=auto eol=lf
+
+# 显式声明文本类型，避免 Windows 上出现整文件 diff
+*.md      text eol=crlf
+*.js      text eol=lf
+*.mjs     text eol=lf
+*.json    text eol=lf
+*.java    text eol=lf
+*.html    text eol=lf
+*.css     text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.svg     text eol=lf
+
+# PowerShell 脚本在 Windows 上按 CRLF 检出更友好
+*.ps1     text eol=crlf
+*.psm1    text eol=crlf
+
+# 二进制文件不参与行尾转换与 diff
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.zip     binary
+*.gz      binary
+*.exe     binary
+*.dll     binary
+
+# 统计时把生成的页面 / 脚本排除在语言统计之外（可选，不影响功能）
+web/index.html linguist-vendored=false

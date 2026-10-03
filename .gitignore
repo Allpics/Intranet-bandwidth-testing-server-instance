@@ -1,0 +1,34 @@
+# ---- 运行时产物（不要提交）----
+classes/
+*.class
+server.log
+server.err.log
+.server.pid
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+.npm/
+
+# ---- Python（如果以后加实现）----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 本地临时文件 ----
+*.tmp
+*.bak
+/tmp/

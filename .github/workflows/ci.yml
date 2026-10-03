@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    name: 语法与编译检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Node 服务端语法检查
+        run: node --check server/server.js
+
+      - name: 设置 JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 编译 Java 服务端
+        run: |
+          mkdir -p classes
+          javac -encoding UTF-8 -d classes server/SpeedTestServer.java
+
+      - name: 抽取页面内联脚本
+        run: |
+          node -e "
+          const fs = require('fs');
+          const html = fs.readFileSync('web/index.html', 'utf8');
+          const m = html.match(/<script>([\s\S]*?)<\/script>/);
+          if (!m) { console.error('web/index.html 里没有内联 <script> 块'); process.exit(1); }
+          fs.writeFileSync('/tmp/app.js', m[1]);
+          console.log('内联脚本 ' + m[1].length + ' 字符');
+          "
+
+      - name: 检查内联 JS 结构（括号 / 字符串配对）
+        run: java tools/JsCheck.java /tmp/app.js
+
+  smoke:
+    name: 接口冒烟测试（Node）
+    runs-on: ubuntu-latest
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 启动服务端
+        run: |
+          node server/server.js 8099 > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8099/api/info > /dev/null; then break; fi
+            sleep 0.3
+          done
+          curl -sf http://127.0.0.1:8099/api/info | tee /tmp/info.json
+          grep -q '"chunkedDownload":true' /tmp/info.json
+
+      - name: 分片下载长度必须精确
+        run: |
+          SID=$(curl -s -X POST 'http://127.0.0.1:8099/api/session?ms=3000' | sed 's/.*"sid":"\([^"]*\)".*/\1/')
+          echo "sid=$SID"
+          LEN=$(curl -s -D - -o /dev/null "http://127.0.0.1:8099/api/download?sid=$SID&chunk=4194304" \
+                | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2}')
+          echo "content-length=$LEN"
+          [ "$LEN" = "4194304" ] || { echo "分片下载长度不符"; exit 1; }
+          echo "$SID" > /tmp/sid
+
+      - name: 分片上传必须精确读满
+        run: |
+          SID=$(cat /tmp/sid)
+          head -c 2097152 /dev/urandom > /tmp/st.bin
+          READ=$(curl -s -D - -o /dev/null -X POST --data-binary @/tmp/st.bin \
+                 "http://127.0.0.1:8099/api/upload?sid=$SID&chunk=2097152" \
+                 | tr -d '\r' | awk 'tolower($1)=="x-bytes-read:"{print $2}')
+          echo "x-bytes-read=$READ"
+          [ "$READ" = "2097152" ] || { echo "分片上传读取字节数不符"; exit 1; }
+
+      - name: 预热流量绝不能计数
+        run: |
+          W=$(curl -s -X POST 'http://127.0.0.1:8099/api/session?ms=2000' | sed 's/.*"sid":"\([^"]*\)".*/\1/')
+          curl -s -o /dev/null "http://127.0.0.1:8099/api/download?sid=$W&chunk=4194304&warmup=1"
+          curl -s -o /dev/null -X POST --data-binary @/tmp/st.bin "http://127.0.0.1:8099/api/upload?sid=$W&chunk=2097152&warmup=1"
+          REPORT=$(curl -s "http://127.0.0.1:8099/api/report?sid=$W")
+          echo "$REPORT"
+          echo "$REPORT" | grep -q '"bytes":0,"ms":0,"mbps":0' || { echo "预热流量被计入了统计"; exit 1; }
+
+      - name: 服务端计量必须与客户端一致
+        run: |
+          SID=$(cat /tmp/sid)
+          REPORT=$(curl -s "http://127.0.0.1:8099/api/report?sid=$SID")
+          echo "$REPORT"
+          # 上面下载了 4194304 字节、上传了 2097152 字节
+          echo "$REPORT" | grep -q '"up":{"bytes":2097152' || { echo "上传字节数不符"; exit 1; }
+          echo "$REPORT" | grep -q '"down":{"bytes":4194304' || { echo "下载字节数不符"; exit 1; }
+
+      - name: 未知会话与错误方法
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8099/api/download?sid=nope')
+          [ "$code" = "404" ] || { echo "未知 sid 应返回 404，实际 $code"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8099/api/upload?sid=nope')
+          [ "$code" = "405" ] || { echo "GET 打上传应返回 405，实际 $code"; exit 1; }
+
+      - name: 输出服务端日志
+        if: always()
+        run: cat /tmp/server.log

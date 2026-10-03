@@ -397,12 +397,24 @@ server.requestTimeout = 0;          // 长测速请求不能被默认超时打�
 server.maxRequestsPerSocket = 0;    // 不主动断连接，减少握手开销
 
 function localIPv4() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces())) {
+  // 排掉 WSL / Hyper-V / VPN / 代理（Clash 等 fake-ip 用 198.18.0.0/15）的虚拟网卡，
+  // 否则会把一堆访问不到的地址当成"内网地址"打印出来。
+  const preferred = [];
+  const others = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
     for (const ni of list || []) {
-      if (ni.family === 'IPv4' && !ni.internal) out.push(ni.address);
+      if (ni.family !== 'IPv4' || ni.internal) continue;
+      const ip = ni.address;
+      if (ip.startsWith('169.254.') || ip.startsWith('198.18.') || ip.startsWith('198.19.')) continue;
+      // 名字里带这些关键字的一般是虚拟网卡
+      if (/vEthernet|WSL|Hyper-V|VirtualBox|VMware|Loopback|TAP|Tailscale|ZeroTier|Docker/i.test(name)) {
+        others.push(ip);
+      } else {
+        preferred.push(ip);
+      }
     }
   }
+  const out = [...new Set(preferred)].concat([...new Set(others)]);
   return out.length ? out : ['127.0.0.1'];
 }
 

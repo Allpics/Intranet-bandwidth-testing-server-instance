@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 先看常见问题
+    url: https://github.com/Allpics/Intranet-bandwidth-testing-server-instance#常见问题--排错
+    about: 「其他设备打不开」「结果全是 0」「数字偏低」等问题在 README 排错表里已有对应处理方式，请先对照。
