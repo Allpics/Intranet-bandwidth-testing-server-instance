@@ -94,8 +94,7 @@ java -cp classes SpeedTestServer 8000
 └─ LICENSE                       # Apache-2.0
 ```
 
-运行时会生成 `classes/`、`server.log`、`server.err.log`、`.server.pid`，这些**已在 `.gitignore` 中忽略**，
-不要提交。
+运行时会生成 `classes/`、`server.log`、`server.err.log`、`.server.pid`
 
 ---
 
