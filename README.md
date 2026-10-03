@@ -86,6 +86,7 @@ java -cp classes SpeedTestServer 8000
 │  └─ index.html                 # 测速页面（单文件，无 CDN、无构建步骤）
 ├─ tools/
 │  ├─ JsCheck.java               # 开发期小工具：检查页面内联 JS 结构与括号配对
+│  ├─ github-push.mjs            # 用 GitHub API 推送，不依赖 git 凭据（备用发布通道）
 │  └─ README.md                  # 工具说明
 ├─ .github/                      # Issue 模板
 ├─ CHANGELOG.md

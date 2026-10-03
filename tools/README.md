@@ -1,4 +1,43 @@
-# tools/ —— 开发期小工具
+# tools/ —— 开发与运维小工具
+
+| 文件 | 用途 |
+| --- | --- |
+| `JsCheck.java` | 检查 `web/index.html` 内联 JS 的结构完整性（括号 / 字符串配对） |
+| `github-push.mjs` | 用 GitHub REST API 把当前目录同步到仓库，**不依赖 git 凭据** |
+
+---
+
+## `github-push.mjs`
+
+在没有 git 凭据、或不想配置 git 的环境里（临时机器、CI、只想快速发布一次改动），
+可以直接用 GitHub API 把工作区推到仓库。
+
+```bash
+# 需要一个有 repo / public_repo 权限的 token
+export GITHUB_TOKEN=ghp_xxx
+
+# 先干跑，看会写哪些文件
+node tools/github-push.mjs --message "docs: 更新说明" --dry-run
+
+# 真正提交
+node tools/github-push.mjs --message "docs: 更新说明"
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `--message "..."` | 提交信息（必填） |
+| `--repo owner/name` | 默认本仓库 |
+| `--branch main` | 目标分支 |
+| `--token xxx` | 也可用环境变量 `GITHUB_TOKEN` / `GH_TOKEN` |
+| `--dry-run` | 只列出将要写入的文件，不提交 |
+
+它会自动跳过 `.git`、`node_modules`、`classes`、`__pycache__`、`*.class`、`*.log`、
+`server.log`、`server.err.log`、`.server.pid` 等不该进仓库的内容。
+
+> ⚠️ 这是**整目录覆盖**式同步：本地不存在的文件会被视为删除。
+> 请只在你是唯一维护者、且本地内容是最新的时候使用；多人协作的分支请走 `git push`。
+
+---
 
 ## `JsCheck.java`
 
