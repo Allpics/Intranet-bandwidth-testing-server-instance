@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>内网测速 · LAN Speed Test</title>
+<style>
+  :root{
+    --bg:#0b0f16; --panel:#121826; --panel2:#0f1522; --line:#1e2839;
+    --fg:#e8eefc; --dim:#8496b4; --accent:#3ea6ff; --down:#31d0aa; --up:#ffb020;
+    --warn:#ff5d5d; --shadow:0 18px 48px rgba(0,0,0,.45);
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,"Liberation Mono",monospace;
+  }
+  html[data-theme="light"]{
+    --bg:#eef2f8; --panel:#ffffff; --panel2:#f6f8fc; --line:#dde5f0;
+    --fg:#16202f; --dim:#5c6b82; --shadow:0 14px 34px rgba(22,32,47,.12);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:radial-gradient(1200px 600px at 50% -200px,#16233a 0%,var(--bg) 60%);
+    color:var(--fg); font:15px/1.55 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    min-height:100vh; padding:28px 16px 56px;
+  }
+  html[data-theme="light"] body{background:radial-gradient(1200px 600px at 50% -200px,#dbe6f7 0%,var(--bg) 60%)}
+  .wrap{max-width:1020px;margin:0 auto}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .logo{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--down));
+        display:grid;place-items:center;font-size:19px;box-shadow:0 6px 18px rgba(62,166,255,.35)}
+  h1{font-size:19px;margin:0;letter-spacing:.2px}
+  .sub{font-size:12px;color:var(--dim)}
+  .chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{font:12px/1 var(--mono);color:var(--dim);background:var(--panel2);border:1px solid var(--line);
+        padding:7px 10px;border-radius:9px;white-space:nowrap}
+  .chip b{color:var(--fg);font-weight:600}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:var(--panel2);
+         color:var(--fg);padding:9px 14px;transition:.15s}
+  button:hover{border-color:#2f3f59;transform:translateY(-1px)}
+  button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .primary{background:linear-gradient(135deg,var(--accent),#2c8fe0);border-color:transparent;color:#04121f;font-weight:700;
+           padding:13px 34px;font-size:16px;box-shadow:0 10px 26px rgba(62,166,255,.32)}
+  .grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1.05fr);gap:16px}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow)}
+  .card h2{font-size:13px;margin:0 0 14px;color:var(--dim);font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+
+  /* ---- 表盘 ---- */
+  .gauge{position:relative;width:100%;max-width:290px;aspect-ratio:1;margin:6px auto 4px;border-radius:50%;
+         background:conic-gradient(from 135deg,var(--down) 0deg,var(--accent) 0deg,var(--panel2) 0deg,var(--panel2) 270deg);
+         padding:15px;transition:background .25s}
+  .gauge::after{content:"";position:absolute;inset:15px;border-radius:50%;background:var(--panel)}
+  .gauge-in{position:absolute;inset:15px;display:grid;place-content:center;text-align:center;z-index:1}
+  .gauge-num{font:700 44px/1 var(--mono);letter-spacing:-1px}
+  .gauge-unit{font-size:12px;color:var(--dim);letter-spacing:2px;margin-top:6px}
+  .gauge-phase{font-size:12px;color:var(--accent);margin-top:10px;min-height:16px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;text-align:center}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px 6px}
+  .stat b{display:block;font:700 19px/1.2 var(--mono)}
+  .stat span{font-size:11px;color:var(--dim)}
+
+  /* ---- 结果 ---- */
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  td.v{text-align:right;font:600 15px/1.3 var(--mono)}
+  .tag{display:inline-block;min-width:20px;text-align:center;font:700 11px/17px var(--mono);border-radius:6px;padding:0 5px}
+  .t-down{background:rgba(49,208,170,.15);color:var(--down)}
+  .t-up{background:rgba(255,176,32,.15);color:var(--up)}
+  .t-ping{background:rgba(62,166,255,.15);color:var(--accent)}
+
+  /* ---- 进度 / 时延柱 ---- */
+  .bar{height:7px;border-radius:99px;background:var(--panel2);overflow:hidden;border:1px solid var(--line);margin-top:14px}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--down));transition:width .3s}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:64px;margin-top:16px;padding-top:6px;border-top:1px solid var(--line)}
+  .bars i{flex:1;min-height:3px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,var(--accent),rgba(62,166,255,.25))}
+  .legend{display:flex;gap:16px;font-size:11px;color:var(--dim);margin-top:10px;flex-wrap:wrap}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+
+  /* ---- 控件 ---- */
+  .ctl{display:grid;gap:12px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .row label{font-size:13px;color:var(--dim)}
+  select,input[type=number]{font:14px var(--mono);background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+        border-radius:10px;padding:9px 11px;min-width:110px}
+  .hint{font-size:12px;color:var(--dim);margin-top:2px}
+  .log{font:12px/1.7 var(--mono);color:var(--dim);max-height:132px;overflow:auto;margin-top:4px}
+  .log b{color:var(--fg);font-weight:600}
+  .err{color:var(--warn)}
+  footer{text-align:center;color:var(--dim);font-size:12px;margin-top:22px;line-height:1.9}
+  code{font:12px var(--mono);background:var(--panel2);border:1px solid var(--line);padding:2px 6px;border-radius:6px}
+  .hist{width:100%;font-size:13px}
+  .hist td{padding:7px 8px;font-family:var(--mono);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div>
+        <h1>内网测速 <span class="sub">LAN Speed Test</span></h1>
+        <div class="sub" id="serverLine">正在连接服务端…</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip" id="chipHost">host <b>—</b></span>
+      <span class="chip" id="chipNet"><span class="dot" style="background:#8496b4"></span>待机</span>
+      <button id="themeBtn" title="切换主题">🌓</button>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- 左：表盘 + 实时 -->
+    <div class="card">
+      <h2>实时速率</h2>
+      <div class="gauge" id="gauge">
+        <div class="gauge-in">
+          <div class="gauge-num" id="bigNum">0.00</div>
+          <div class="gauge-unit">Mbps</div>
+          <div class="gauge-phase" id="phase">点击开始测速</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="sPing">—</b><span>时延 ms</span></div>
+        <div class="stat"><b id="sJit">—</b><span>抖动 ms</span></div>
+        <div class="stat"><b id="sLoss">—</b><span>丢包 %</span></div>
+      </div>
+      <div class="bar"><i id="prog"></i></div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--down)"></i>下载</span>
+        <span><i class="dot" style="background:var(--up)"></i>上传</span>
+        <span id="legendPing"><i class="dot" style="background:var(--accent)"></i>时延采样</span>
+      </div>
+    </div>
+
+    <!-- 右：结果 + 控件 -->
+    <div class="card">
+      <h2>测试结果</h2>
+      <table>
+        <tr><td><span class="tag t-down">↓</span> 下载</td><td class="v" id="rDown">—</td></tr>
+        <tr><td><span class="tag t-up">↑</span> 上传</td><td class="v" id="rUp">—</td></tr>
+        <tr><td><span class="tag t-ping">◦</span> 时延</td><td class="v" id="rPing">—</td></tr>
+        <tr><td><span class="tag t-ping">≈</span> 抖动</td><td class="v" id="rJit">—</td></tr>
+        <tr><td>并发连接</td><td class="v" id="rConn">—</td></tr>
+        <tr><td>测量窗口</td><td class="v" id="rWin">—</td></tr>
+      </table>
+      <div class="bars" id="bars"></div>
+
+      <div class="ctl" style="margin-top:20px">
+        <div class="row">
+          <label for="dur">单阶段时长</label>
+          <select id="dur">
+            <option value="5000">5 秒</option>
+            <option value="10000" selected>10 秒</option>
+            <option value="15000">15 秒</option>
+            <option value="20000">20 秒</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="conn">并发流</label>
+          <select id="conn">
+            <option value="1">1（单流）</option>
+            <option value="2">2</option>
+            <option value="4" selected>4</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="dir">方向</label>
+          <select id="dir">
+            <option value="both" selected>上传 + 下载</option>
+            <option value="down">仅下载</option>
+            <option value="up">仅上传</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="dmode">下载实现</label>
+          <select id="dmode">
+            <option value="chunk" selected>分片（推荐）</option>
+            <option value="stream">单流 XHR（备用）</option>
+          </select>
+        </div>
+        <div class="row" style="margin-top:2px">
+          <button class="primary" id="startBtn" style="flex:1">开始测速</button>
+          <button id="stopBtn" disabled>停止</button>
+        </div>
+        <div class="hint">客户端与服务端双向计量；服务端字节数 + 服务端时钟窗口为准，误差不受浏览器计时影响。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>过程日志</h2>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>诊断：客户端 vs 服务端计数 <span class="sub" style="text-transform:none;letter-spacing:0">（两边应基本一致；不一致时把这张表发出来）</span></h2>
+    <table class="hist" id="diagTable"><tr><td class="sub">尚无数据</td></tr></table>
+    <div class="legend" style="margin-top:10px">
+      <span>当前分片：上传 <b id="diagUpChunk">—</b> / 下载 <b id="diagDownChunk">—</b></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>历史记录 <span class="sub" style="text-transform:none;letter-spacing:0">（仅保存在本机浏览器）</span></h2>
+    <table class="hist" id="hist"><tr><td class="sub">暂无记录</td></tr></table>
+  </div>
+
+  <footer>
+    服务端：<code>java -cp classes SpeedTestServer 8000</code>　·　多设备请用本机内网 IP 访问，例如 <code>http://192.168.x.x:8000/</code><br>
+    内网环境安全性由网络本身保证，本服务不做鉴权，请勿暴露到公网。
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =======================================================================
+ * 内网测速前端
+ * 流程：/api/info → ping×N → 预热(up+down) → 并行上传 → 并行下载 → /api/report
+ * 关键点：吞吐量以「服务端计数字节 / 服务端时钟窗口」为准，
+ *        客户端计时只用于实时显示，避免浏览器节流/时钟抖动影响结果。
+ * ===================================================================== */
+
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => (v === null || v === undefined || !isFinite(v)) ? "—" : v.toFixed(d);
+
+let running = false, stopController = null, pollTimer = null;
+let cfg = { ms: 10000, conn: 4, dir: "both", dmode: "chunk" };
+let live = { down: 0, up: 0, tDown: 0, tUp: 0, lastDown: 0, lastUp: 0, lastT: 0 };
+let diag = [];                       // 诊断表：[阶段, 客户端字节, 服务端字节, 客户端耗时, 速率]
+
+/* ---------- 日志 ---------- */
+function log(msg, cls) {
+  const el = $("log");
+  const t = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  el.insertAdjacentHTML("afterbegin",
+    `<div class="${cls || ""}"><b>${t}</b> ${msg}</div>`);
+  while (el.childElementCount > 200) el.lastElementChild.remove();
+}
+function setPhase(t) { $("phase").textContent = t; }
+function setNet(text, color) {
+  $("chipNet").innerHTML = `<span class="dot" style="background:${color}"></span>${text}`;
+}
+
+/* ---------- 表盘 ---------- */
+function paintGauge(mbps, dir) {
+  const max = 1000;                                  // 表盘满量程 1000 Mbps
+  const frac = Math.max(0, Math.min(1, mbps / max));
+  const deg = frac * 270;
+  const c1 = dir === "up" ? "#ffb020" : "#31d0aa";
+  const c2 = dir === "up" ? "#ff7a45" : "#3ea6ff";
+  $("gauge").style.background =
+    `conic-gradient(from 135deg, ${c1} 0deg, ${c2} ${deg}deg, var(--panel2) ${deg}deg, var(--panel2) 270deg)`;
+  $("bigNum").textContent = mbps >= 100 ? mbps.toFixed(0) : mbps.toFixed(2);
+}
+
+/* ---------- 工具 ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function sleepAbort(ms) {
+  const end = Date.now() + ms;
+  while (running && Date.now() < end) await sleep(Math.min(150, end - Date.now()));
+}
+async function createSession(ms) {
+  const r = await fetch(`api/session?ms=${ms}`, { method: "POST", cache: "no-store" });
+  if (!r.ok) throw new Error("创建会话失败 HTTP " + r.status);
+  return await r.json();
+}
+
+/* =======================================================================
+ * 吞吐量测量：分片 + 浏览器原生传输
+ * -----------------------------------------------------------------------
+ * 旧实现让 JS 逐块读 fetch 的 ReadableStream，问题很多：
+ *   - 浏览器内部缓冲/背压不确定，读数可能长时间为 0；
+ *   - 代理、杀软、abort 时序都会干扰 JS 侧计数；
+ *   - 上传还要依赖 ReadableStream 作为请求体，Safari/Firefox 根本不支持。
+ * 新实现把"搬数据"完全交给浏览器原生网络栈：
+ *   - 下载：一次 GET 固定 chunk 字节（带 Content-Length），JS 只发请求、
+ *           核对收到的字节数、然后丢弃；吞吐不经过 JS 热路径。
+ *   - 上传：一次 POST 固定大小 Uint8Array；两端字节数都精确可知。
+ * 每轮按耗时自动调整分片大小（目标 20–400 ms/片），兼容千兆到万兆。
+ * ===================================================================== */
+
+let UPLOAD_CHUNK   = 8 * 1024 * 1024;    // 上传分片初始 8 MiB
+let DOWNLOAD_CHUNK = 16 * 1024 * 1024;   // 下载分片初始 16 MiB
+const CHUNK_MIN = 2 * 1024 * 1024, CHUNK_MAX = 64 * 1024 * 1024;
+
+/** 按单片耗时调整下一片大小，避免"请求太多"或"单片太大" */
+function tuneChunk(cur, ms) {
+  let next = cur;
+  // 阈值放宽到 30–600 ms：太小的分片会让请求数暴涨（弱网下尤其明显），
+  // 太大的分片又会让单片耗时过长、丢失窗口精度。
+  if (ms < 30) next = cur * 2;
+  else if (ms > 600) next = cur / 2;
+  return Math.max(CHUNK_MIN, Math.min(CHUNK_MAX, Math.round(next)));
+}
+
+/** 下载：反复 GET 固定长度分片，按 Content-Length 精确累计字节
+ *  注意：本函数绝不主动 abort —— 只依赖 runningFn() 到点自然收尾。
+ *  历史 bug：曾在上传/下载阶段之间 abort 并重建 AbortController，
+ *  而 signal 是 const，于是后续 fetch 全部带着"已中止"的信号秒失败，
+ *  表现为「下载 0 个请求、0 字节、signal is aborted without reason」。 */
+async function chunkDownload(url, runningFn, stats, signal) {
+  while (runningFn()) {
+    const t0 = performance.now();
+    let got = 0;
+    try {
+      const res = await fetch(url + "&chunk=" + DOWNLOAD_CHUNK + "&_=" + Math.random().toString(36).slice(2),
+        { cache: "no-store", signal });
+      stats.reqs++;
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const hdr = res.headers.get("X-Chunk-Bytes");
+      const clen = res.headers.get("Content-Length");
+      const want = parseInt(hdr || clen || "0", 10) || DOWNLOAD_CHUNK;
+      stats.last = `HTTP ${res.status} X-Chunk-Bytes=${hdr} Content-Length=${clen}`;
+      const buf = await res.arrayBuffer();
+      got = buf.byteLength;
+      // 长度不符（被代理/杀软截断或改包）：不整体失败，收到多少算多少，
+      // 并把分片缩小一半，下一轮用更小的片重试。
+      if (got !== want) {
+        stats.truncated++;
+        DOWNLOAD_CHUNK = Math.max(CHUNK_MIN, Math.round(DOWNLOAD_CHUNK / 2));
+      }
+    } catch (e) {
+      if (!runningFn()) return;                     // 正常停止（含 abort）
+      stats.errors++;
+      stats.errMsg = (e && e.message) ? e.message : String(e);
+      if (got > 0) stats.bytes += got;              // 出错前拿到的部分也要计入
+      return;                                       // 该流退出，不再无限重试
+    } finally {
+      if (got > 0) {
+        stats.bytes += got;
+        DOWNLOAD_CHUNK = tuneChunk(DOWNLOAD_CHUNK, performance.now() - t0);
+      }
+    }
+  }
+}
+
+/* 上传负载：8 块各不相同的随机缓冲轮流用。
+ * 用同一块内容反复 POST 时，某些中间设备（WAN 加速、压缩代理）会识别重复内容做优化，
+ * 轮换内容 + 随机填充可以避免这种"假高/假低"的读数。 */
+const UP_POOL_MAX = 8;
+let upPool = [];
+function resetUpPool() { upPool = []; }
+function upBuffer(i) {
+  if (upPool[i] && upPool[i].length === UPLOAD_CHUNK) return upPool[i];
+  const b = new Uint8Array(UPLOAD_CHUNK);
+  for (let k = 0; k + 65536 <= UPLOAD_CHUNK; k += 65536) {
+    crypto.getRandomValues(b.subarray(k, k + 65536));
+  }
+  upPool[i] = b;
+  return b;
+}
+
+/** 上传：反复 POST 固定大小分片（无流式请求体依赖，Safari/Firefox 同样可用） */
+async function chunkUpload(url, runningFn, stats, signal) {
+  while (runningFn()) {
+    const buf = upBuffer((stats.reqs || 0) % UP_POOL_MAX);
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url + "&chunk=" + UPLOAD_CHUNK + "&_=" + Math.random().toString(36).slice(2),
+        { method: "POST", body: buf, cache: "no-store", signal });
+      stats.reqs++;
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const read = res.headers.get("X-Bytes-Read");
+      stats.last = `HTTP ${res.status} X-Bytes-Read=${read}`;
+      await res.arrayBuffer();
+      stats.bytes += UPLOAD_CHUNK;
+    } catch (e) {
+      if (!runningFn()) return;
+      stats.errors++;
+      stats.errMsg = (e && e.message) ? e.message : String(e);
+      return;
+    }
+    UPLOAD_CHUNK = tuneChunk(UPLOAD_CHUNK, performance.now() - t0);
+  }
+}
+
+/** 起 N 条并行分片流，跑满 ms 毫秒，返回总量 / 请求数 / 错误信息 */
+async function runChunkPhase(kind, sid, conns, ms, signal) {
+  const stats = { bytes: 0, errors: 0, reqs: 0, errMsg: "", last: "", truncated: 0, buf: null };
+  const t0 = performance.now();
+  const endAt = t0 + ms;
+  const until = () => running && performance.now() < endAt;
+  const tasks = [];
+  for (let i = 0; i < conns; i++) {
+    tasks.push((kind === "down"
+      ? chunkDownload(`api/download?sid=${sid}`, until, stats, signal)
+      : chunkUpload(`api/upload?sid=${sid}`, until, stats, signal)
+    ).catch(e => { if (running) log(`${kind === "down" ? "下载" : "上传"}分片异常：${e.message}`, "err"); }));
+  }
+  await Promise.allSettled(tasks);
+  const elapsed = (performance.now() - t0) / 1000;
+  return { bytes: stats.bytes, errors: stats.errors, reqs: stats.reqs, errMsg: stats.errMsg,
+           last: stats.last, truncated: stats.truncated, elapsed,
+           mbps: stats.bytes * 8 / elapsed / 1e6 };
+}
+
+/* -----------------------------------------------------------------------
+ * 单流探测：XMLHttpRequest + onprogress
+ * 与 fetch/arrayBuffer 完全无关的一条独立路径，用来定位
+ * "请求根本没成功" 还是 "数据没到浏览器"。
+ * --------------------------------------------------------------------- */
+function singleStreamProbe(sid, ms, signal) {
+  return new Promise(resolve => {
+    const out = { bytes: 0, events: 0, status: 0, len: "", err: "", elapsed: 0, mbps: 0 };
+    const t0 = performance.now();
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      out.elapsed = (performance.now() - t0) / 1000;
+      out.mbps = out.bytes * 8 / out.elapsed / 1e6;
+      resolve(out);
+    };
+    let xhr;
+    try {
+      xhr = new XMLHttpRequest();
+      xhr.open("GET", `api/download?sid=${sid}&ms=${ms}&probe=1&_=${Math.random().toString(36).slice(2)}`, true);
+      // 用 blob 而不是 arraybuffer：数据落在浏览器的 blob 存储里，
+      // 不会把几 GB 一次性搬进 JS 堆，慢机器/手机也不会因内存压力卡死。
+      xhr.responseType = "blob";
+      xhr.onprogress = ev => { out.bytes = ev.loaded; out.events++; };
+      xhr.onload = () => {
+        out.bytes = Math.max(out.bytes, xhr.response ? xhr.response.size : 0);
+        out.status = xhr.status;
+        out.len = xhr.getResponseHeader("Content-Length") || "";
+        finish();
+      };
+      xhr.onerror = () => { out.err = "网络错误（连接被拒/被中断）"; finish(); };
+      xhr.ontimeout = () => { out.err = "超时"; finish(); };
+      xhr.onabort = finish;
+      // 头到了就先记下状态，便于判断请求是否成功
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState >= 2 && !out.status) {
+          out.status = xhr.status;
+          out.len = xhr.getResponseHeader("Content-Length") || "";
+        }
+      };
+      if (signal) {
+        if (signal.aborted) { out.err = "已中止"; finish(); return; }
+        signal.addEventListener("abort", () => { try { xhr.abort(); } catch (e) {} out.err = out.err || "已中止"; finish(); },
+          { once: true });
+      }
+      // 服务端应当在自己窗口结束时关闭响应；留 5 秒余量兜底，避免永久挂起
+      setTimeout(() => {
+        if (!done) {
+          try { xhr.abort(); } catch (e) {}
+          out.err = out.err || "探测超时被中断";
+          finish();
+        }
+      }, ms + 5000);
+      xhr.send();
+    } catch (e) {
+      out.err = (e && e.message) ? e.message : String(e);
+      finish();
+    }
+  });
+}
+
+/* ---------- 时延测量 ---------- */
+async function measureLatency(rounds, signal) {
+  const samples = [];
+  let lost = 0;
+  for (let i = 0; i < rounds && running; i++) {
+    const t0 = performance.now();
+    try {
+      const r = await fetch("api/ping?t=" + i + "&r=" + Math.random(), { cache: "no-store", signal });
+      await r.arrayBuffer();
+      const rtt = performance.now() - t0;
+      if (r.ok || r.status === 204) samples.push(rtt); else lost++;
+    } catch (e) {
+      if (!running) break;
+      lost++;
+    }
+    renderBars(samples);
+    await sleep(60);
+  }
+  const avg = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : null;
+  let jit = null;
+  if (samples.length > 1) {
+    // 相邻采样差值的平均绝对值 = RFC3550 式抖动
+    let s = 0;
+    for (let i = 1; i < samples.length; i++) s += Math.abs(samples[i] - samples[i - 1]);
+    jit = s / (samples.length - 1);
+  }
+  const min = samples.length ? Math.min(...samples) : null;
+  return { samples, avg, min, jit, lost, total: rounds };
+}
+function renderBars(samples) {
+  if (!samples.length) { $("bars").innerHTML = ""; return; }
+  const max = Math.max(...samples, 1);
+  $("bars").innerHTML = samples.map(v =>
+    `<i style="height:${Math.max(4, (v / max) * 100)}%" title="${v.toFixed(2)} ms"></i>`).join("");
+}
+
+/* ---------- 实时速率轮询（服务端权威计数） ---------- */
+function startPoll(sid) {
+  live = { down: 0, up: 0, lastDown: 0, lastUp: 0, lastT: performance.now(),
+           dir: "down", speed: 0, cumDown: 0, cumUp: 0 };
+  const tick = async () => {
+    if (!running) return;
+    try {
+      const r = await fetch("api/report?sid=" + sid, { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        const now = performance.now();
+        const dt = (now - live.lastT) / 1000;
+        if (dt > 0.12) {
+          const dDown = (j.down.bytes - live.lastDown) * 8 / dt / 1e6;
+          const dUp = (j.up.bytes - live.lastUp) * 8 / dt / 1e6;
+          live.lastDown = j.down.bytes; live.lastUp = j.up.bytes; live.lastT = now;
+          live.cumDown = j.down.bytes; live.cumUp = j.up.bytes;
+          const inst = live.dir === "up" ? dUp : dDown;
+          // 指数平滑，读数不跳字
+          live.speed = live.speed * 0.35 + Math.max(0, inst) * 0.65;
+        }
+        paintGauge(live.speed, live.dir);
+        $("bigNum").title = `累计 ↑${(live.cumUp / 1048576).toFixed(1)} MiB / ↓${(live.cumDown / 1048576).toFixed(1)} MiB`;
+      }
+    } catch (e) { /* 轮询失败忽略，不影响测速 */ }
+    if (running) pollTimer = setTimeout(tick, 300);
+  };
+  tick();
+}
+
+/* ---------- 主流程 ---------- */
+async function runTest() {
+  if (running) return;
+  running = true;
+  cfg.ms = +$("dur").value; cfg.conn = +$("conn").value;
+  cfg.dir = $("dir").value; cfg.dmode = $("dmode").value;
+  $("startBtn").disabled = true; $("stopBtn").disabled = false;
+  $("log").innerHTML = "";
+  setNet("测速中", "#ffb020");
+  $("legendPing").style.opacity = 1;
+  ["rDown", "rUp", "rPing", "rJit", "rConn", "rWin"].forEach(i => $(i).textContent = "—");
+  paintGauge(0, "down");
+  $("prog").style.width = "0%";
+
+  // 每次测速只用一个"中止控制器"：
+  //   stopController 只由「停止」按钮触发，signal 全程不变（绝不中途替换，
+  //   否则 const signal 会指向已中止的旧信号，导致后续请求秒失败）。
+  //   各阶段的正常结束靠 until()/服务端窗口，不靠 abort。
+  stopController = new AbortController();
+  const signal = stopController.signal;
+  const t_start = performance.now();
+  diag = [];
+  renderDiag();
+
+  try {
+    const info = await (await fetch("api/info", { cache: "no-store" })).json();
+    log(`服务端就绪：<b>${info.server}</b>，HTTP 线程 ${info.threads}，单阶段上限 ${info.maxPhaseMs / 1000}s、分片上限 ${(info.maxChunkBytes / 1048576).toFixed(0)} MiB`);
+    if (!info.chunkedDownload) log("服务端不支持分片模式，请用最新的 SpeedTestServer.java 重新编译", "err");
+  } catch (e) { log("无法读取 /api/info：" + e.message, "err"); }
+
+  let sess;
+  try {
+    sess = await createSession(cfg.ms);
+  } catch (e) {
+    log("创建测速会话失败：" + e.message, "err");
+    setNet("失败", "#ff5d5d"); finish(); return;
+  }
+  log(`会话 <b>${sess.sid.slice(0, 8)}</b> 已建立，阶段时长 ${cfg.ms / 1000}s，并发 ${cfg.conn} 流`);
+  startPoll(sess.sid);
+
+  /* 1) 时延 */
+  setPhase("测量时延中…");
+  resetUpPool();
+  const timers = [];
+  const latency = await measureLatency(16, signal);
+  if (latency.avg !== null) {
+    $("sPing").textContent = fmt(latency.avg, 2);
+    $("sJit").textContent = fmt(latency.jit, 2);
+    $("sLoss").textContent = fmt(latency.lost / latency.total * 100, 1);
+    $("rPing").textContent = `${fmt(latency.avg, 2)} ms（最低 ${fmt(latency.min, 2)}）`;
+    $("rJit").textContent = `${fmt(latency.jit, 2)} ms`;
+    log(`时延：平均 <b>${fmt(latency.avg, 2)} ms</b>，抖动 ${fmt(latency.jit, 2)} ms，丢包 ${latency.lost}/${latency.total}`);
+  } else {
+    log("时延测量失败（连接被中断）", "err");
+  }
+  if (!running) { finish(); return; }
+
+  /* 2) 预热：不计数，让 TCP 窗口、网卡与浏览器网络栈进入稳定状态 */
+  setPhase("链路预热中…");
+  log("预热 2.5s × 2（不计入成绩）…");
+  try {
+    const warmSess = await createSession(2500);
+    const wUp = runChunkPhase("up", warmSess.sid, cfg.conn, 2200, signal).catch(() => {});
+    await sleepAbort(2300);
+    const wDown = runChunkPhase("down", warmSess.sid, cfg.conn, 2200, signal).catch(() => {});
+    await sleepAbort(2300);
+    await Promise.allSettled([wUp, wDown]);
+    log("预热完成");
+  } catch (e) {
+    log("预热阶段异常（已忽略）：" + e.message);
+  }
+  if (!running) { finish(); return; }
+
+  /* 3) 上传（固定大小分片 POST，两端字节数都精确） */
+  let upClient = null;
+  if (cfg.dir === "both" || cfg.dir === "up") {
+    live.dir = "up"; live.speed = 0; paintGauge(0, "up");
+    setPhase(`上传测速中（${cfg.conn} 流 / ${cfg.ms / 1000}s）…`);
+    log(`开始上传测速：${cfg.conn} 条并行分片流，分片 ${(UPLOAD_CHUNK / 1048576).toFixed(0)} MiB 起`);
+    const t0 = performance.now();
+    const p = runChunkPhase("up", sess.sid, cfg.conn, cfg.ms, signal);
+    while (running && performance.now() < t0 + cfg.ms) {
+      const f = Math.min(1, (performance.now() - t0) / cfg.ms);
+      $("prog").style.width = (f * (cfg.dir === "both" ? 50 : 100)) + "%";
+      await sleep(120);
+    }
+    // 这里不 abort：分片上传的 until() 到点后自然收尾，
+    // 任何情况下都不能让 stopController 变成"已中止"，
+    // 否则后面所有请求都会带着已中止的 signal 秒失败
+    // （曾出现：下载 4 条流全部 signal is aborted without reason、0 个请求）。
+    upClient = await p;
+    log(`上传阶段结束：客户端发送 ${(upClient.bytes / 1048576).toFixed(1)} MiB / ${upClient.elapsed.toFixed(2)}s` +
+        (upClient.errors ? `，${upClient.errors} 次分片失败` : ""));
+  }
+
+  /* 4) 下载（固定长度分片 GET，浏览器原生下载，JS 只计数并丢弃） */
+  let downClient = null;
+  if (running && (cfg.dir === "both" || cfg.dir === "down")) {
+    live.dir = "down";
+    const off = cfg.dir === "both" ? 50 : 0;
+    live.speed = 0;
+    live.lastT = performance.now(); live.lastDown = 0; live.lastUp = 0;
+    setPhase(`下载测速中（${cfg.dmode === "stream" ? "单流 XHR" : cfg.conn + " 流分片"} / ${cfg.ms / 1000}s）…`);
+    const t0 = performance.now();
+    let p;
+    if (cfg.dmode === "stream") {
+      log(`开始下载测速：单流 XHR 模式，服务端持续流 ${cfg.ms / 1000}s`);
+      p = singleStreamProbe(sess.sid, cfg.ms).then(pr => ({
+        bytes: pr.bytes, errors: pr.err ? 1 : 0, reqs: 1, errMsg: pr.err,
+        last: `HTTP ${pr.status} Content-Length=${pr.len || "无"}（chunked）`,
+        elapsed: pr.elapsed, mbps: pr.mbps, events: pr.events
+      }));
+    } else {
+      log(`开始下载测速：${cfg.conn} 条并行分片流，分片 ${(DOWNLOAD_CHUNK / 1048576).toFixed(0)} MiB 起`);
+      p = runChunkPhase("down", sess.sid, cfg.conn, cfg.ms, signal);
+    }
+    while (running && performance.now() < t0 + cfg.ms) {
+      const f = Math.min(1, (performance.now() - t0) / cfg.ms);
+      $("prog").style.width = (off + f * (100 - off)) + "%";
+      await sleep(120);
+    }
+    // 分片下载不需要 abort：until() 到点后 while 循环自然结束，
+    // 正在飞的那一片收完就退出（提前 abort 只会把这半片的数据丢掉）。
+    // 只有"用户点停止"才会通过 stopController 真的中断。
+    downClient = await p;
+    log(`下载阶段结束：客户端收到 ${(downClient.bytes / 1048576).toFixed(1)} MiB / ${downClient.elapsed.toFixed(2)}s，` +
+        `${downClient.reqs} 个请求` +
+        (downClient.truncated ? `，<span class="err">${downClient.truncated} 次分片长度不符（已自动缩小分片）</span>` : "") +
+        (downClient.errors ? `，<span class="err">失败 ${downClient.errors} 次（${downClient.errMsg}）</span>` : ""));
+
+    // 自愈 + 定位：分片一片都没拿到时，走完全独立的单流 XHR 路径（fetch 之外的第二条路）
+    if (running && downClient.bytes === 0) {
+      log("分片下载没有拿到任何数据，改用「单流 XHR」独立路径探测…", "err");
+      const probe = await singleStreamProbe(sess.sid, 5000, stopController.signal);
+      const repNow = await fetch("api/report?sid=" + sess.sid, { cache: "no-store" })
+        .then(r => r.json()).catch(() => null);
+      const srv = repNow ? repNow.down.bytes : 0;
+      log(`单流探测：客户端 ${(probe.bytes / 1048576).toFixed(1)} MiB / ${probe.elapsed.toFixed(2)}s ` +
+          `= ${fmt(probe.mbps)} Mbps；HTTP ${probe.status}，Content-Length=${probe.len || "无"}，` +
+          `progress 事件 ${probe.events} 次，服务端累计发出 ${(srv / 1048576).toFixed(1)} MiB` +
+          (probe.err ? `，错误：${probe.err}` : ""), probe.bytes > 0 ? "" : "err");
+      if (probe.bytes > 0) {
+        downClient = { bytes: downClient.bytes + probe.bytes, errors: 0, reqs: downClient.reqs + 1,
+          errMsg: probe.err, last: `HTTP ${probe.status}`, elapsed: probe.elapsed, mbps: probe.mbps };
+      } else if (probe.err) downClient.errMsg = probe.err;
+      else downClient.errMsg = `单流探测也拿到 0 字节（HTTP ${probe.status}，服务端已发出 ${(srv / 1048576).toFixed(1)} MiB）`;
+    }
+  }
+
+  /* 5) 汇总：服务端字节数（权威）+ 客户端墙钟（权威计时），两者都显示用于互相印证 */
+  setPhase("汇总结果…");
+  let rep = null;
+  for (let i = 0; i < 10; i++) {
+    try {
+      const r = await fetch("api/report?sid=" + sess.sid, { cache: "no-store" });
+      if (r.ok) { rep = await r.json(); if (rep.up.bytes > 0 || rep.down.bytes > 0) break; }
+    } catch (e) {}
+    await sleep(200);
+  }
+  const upOn = cfg.dir !== "down", downOn = cfg.dir !== "up";
+  const sUpBytes   = rep ? rep.up.bytes   : (upClient   ? upClient.bytes   : 0);
+  const sDownBytes = rep ? rep.down.bytes : (downClient ? downClient.bytes : 0);
+  const upMbps   = (upClient   && upOn)   ? upClient.mbps   : 0;
+  const downMbps = (downClient && downOn) ? downClient.mbps : 0;
+
+  $("rDown").textContent = downOn ? `${fmt(downMbps)} Mbps` : "未测试";
+  $("rUp").textContent   = upOn   ? `${fmt(upMbps)} Mbps`   : "未测试";
+  $("rConn").textContent = cfg.dmode === "stream"
+    ? `单流 XHR × ${cfg.ms / 1000} s`
+    : `${cfg.conn} 条并行分片流 × ${cfg.ms / 1000} s`;
+  $("rWin").textContent  = downOn && downClient ? `${downClient.elapsed.toFixed(2)} s / ${getChunkLabel("down")}`
+                         : (upClient ? `${upClient.elapsed.toFixed(2)} s / ${getChunkLabel("up")}` : "—");
+
+  const gD = z => (z / 1073741824).toFixed(2) + " GiB";
+  const mismatch = [];
+  if (upOn && upClient && rep && Math.abs(rep.up.bytes - upClient.bytes) > 1024 * 1024) {
+    mismatch.push(`上传 服务端 ${gD(rep.up.bytes)} vs 客户端 ${gD(upClient.bytes)}`);
+  }
+  if (downOn && downClient && rep && Math.abs(rep.down.bytes - downClient.bytes) > 1024 * 1024) {
+    mismatch.push(`下载 服务端 ${gD(rep.down.bytes)} vs 客户端 ${gD(downClient.bytes)}`);
+  }
+  diag.push(["阶段", "客户端收到", "服务端收到", "分片数", "耗时", "速率", "备注"]);
+  if (upOn && upClient) diag.push(["上传", gD(upClient.bytes), rep ? gD(rep.up.bytes) : "—",
+    String(upClient.reqs), upClient.elapsed.toFixed(2) + " s", fmt(upMbps) + " Mbps",
+    upClient.errMsg ? "错误: " + upClient.errMsg : (upClient.errors ? upClient.errors + " 次失败" : "OK")]);
+  if (downOn && downClient) diag.push(["下载", gD(downClient.bytes), rep ? gD(rep.down.bytes) : "—",
+    String(downClient.reqs), downClient.elapsed.toFixed(2) + " s", fmt(downMbps) + " Mbps",
+    downClient.errMsg ? "错误: " + downClient.errMsg : (downClient.errors ? downClient.errors + " 次失败" : "OK")]);
+  renderDiag();
+
+  log(`<b>结果</b>：↓ ${downOn ? fmt(downMbps) + " Mbps" : "未测试"}　↑ ${upOn ? fmt(upMbps) + " Mbps" : "未测试"}`);
+  if (rep) log(`两端字节数：↑ ${gD(rep.up.bytes)} / ↓ ${gD(rep.down.bytes)}（服务端计数）`);
+  if (mismatch.length) log("字节数不一致，请把诊断表发给开发者：" + mismatch.join("；"), "err");
+  paintGauge(downOn ? downMbps : upMbps, downOn ? "down" : "up");
+  pushHistory({
+    t: new Date().toLocaleString("zh-CN", { hour12: false }),
+    down: downOn ? downMbps : null, up: upOn ? upMbps : null,
+    ping: latency.avg, jit: latency.jit, conn: cfg.conn, ms: cfg.ms
+  });
+
+  $("prog").style.width = "100%";
+  setPhase(`完成，用时 ${((performance.now() - t_start) / 1000).toFixed(1)} s`);
+  setNet("完成", "#31d0aa");
+  log("<b>测速完成</b>");
+  finish();
+}
+
+function finish() {
+  running = false;
+  clearTimeout(pollTimer);
+  $("startBtn").disabled = false; $("stopBtn").disabled = true;
+  // 全部阶段已结束，这时才释放控制器（中断任何遗留请求）
+  if (stopController) { try { stopController.abort(); } catch (e) {} stopController = null; }
+}
+
+/* ---------- 历史记录 ---------- */
+const HK = "lan-speedtest-history-v1";
+function pushHistory(rec) {
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem(HK) || "[]"); } catch (e) {}
+  arr.unshift(rec);
+  arr = arr.slice(0, 20);
+  try { localStorage.setItem(HK, JSON.stringify(arr)); } catch (e) {}
+  renderHistory();
+}
+/* ---------- 诊断表 ---------- */
+const getChunkLabel = k => (k === "up" ? UPLOAD_CHUNK : DOWNLOAD_CHUNK) / 1048576 + " MiB/片";
+function renderDiag() {
+  const t = $("diagTable");
+  if (!diag.length) { t.innerHTML = `<tr><td class="sub">尚无数据</td></tr>`; return; }
+  t.innerHTML = diag.map((row, i) => "<tr>" + row.map(c =>
+    i === 0 ? `<th>${c}</th>` : `<td>${c}</td>`).join("") + "</tr>").join("");
+  $("diagUpChunk").textContent = (UPLOAD_CHUNK / 1048576).toFixed(0) + " MiB";
+  $("diagDownChunk").textContent = (DOWNLOAD_CHUNK / 1048576).toFixed(0) + " MiB";
+}
+function renderHistory() {
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem(HK) || "[]"); } catch (e) {}
+  const t = $("hist");
+  if (!arr.length) { t.innerHTML = `<tr><td class="sub">暂无记录</td></tr>`; return; }
+  t.innerHTML = `<tr><th>时间</th><th>下载 Mbps</th><th>上传 Mbps</th><th>时延 ms</th><th>抖动</th><th>流</th></tr>` +
+    arr.map(r => `<tr><td>${r.t}</td><td>${fmt(r.down)}</td><td>${fmt(r.up)}</td>` +
+      `<td>${fmt(r.ping)}</td><td>${fmt(r.jit)}</td><td>${r.conn}</td></tr>`).join("");
+}
+
+/* ---------- 事件绑定 ---------- */
+$("startBtn").onclick = () => runTest().catch(e => {
+  log("测速异常终止：" + (e && e.message ? e.message : e), "err");
+  setNet("异常", "#ff5d5d"); finish();
+});
+$("stopBtn").onclick = () => {
+  log("用户中止测速", "err");
+  running = false;
+  if (stopController) { try { stopController.abort(); } catch (e) {} }
+  setPhase("已中止"); setNet("已中止", "#ff5d5d");
+  setTimeout(finish, 50);
+};
+$("themeBtn").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", cur);
+  try { localStorage.setItem("lan-speedtest-theme", cur); } catch (e) {}
+};
+try {
+  const th = localStorage.getItem("lan-speedtest-theme");
+  if (th) document.documentElement.setAttribute("data-theme", th);
+} catch (e) {}
+
+/* ---------- 启动自检 ---------- */
+(async () => {
+  $("chipHost").innerHTML = `host <b>${location.host}</b>`;
+  try {
+    const r = await fetch("api/info", { cache: "no-store" });
+    const j = await r.json();
+    $("serverLine").textContent = `已连接服务端 ${location.host} · ${j.server}`;
+    setNet("就绪", "#31d0aa");
+    log(`已连接 <b>${location.host}</b>，服务端 ${j.server}`);
+  } catch (e) {
+    $("serverLine").textContent = "无法连接服务端";
+    setNet("离线", "#ff5d5d");
+    log("无法连接服务端：" + e.message, "err");
+  }
+  renderHistory();
+})();
+</script>
+</body>
+</html>
