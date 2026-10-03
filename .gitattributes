@@ -27,6 +27,3 @@
 *.gz      binary
 *.exe     binary
 *.dll     binary
-
-# 统计时把生成的页面 / 脚本排除在语言统计之外（可选，不影响功能）
-web/index.html linguist-vendored=false
